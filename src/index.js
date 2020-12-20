@@ -1131,6 +1131,43 @@ function anime(params = {}) {
     engine();
   }
 
+   /**
+   * Added a custom function to continue from last added
+   * added by: Manuel Baun
+   */
+  instance.continue = function () {
+    if (!instance.paused) return;
+
+    if (instance.completed) {
+      const direction = instance.direction;
+      instance.passThrough = false;
+      //   instance.currentTime = 0;
+      //   instance.progress = 0;
+      instance.paused = true;
+      instance.began = false;
+      instance.loopBegan = false;
+      instance.changeBegan = false;
+      instance.completed = false;
+      instance.changeCompleted = false;
+      instance.reversePlayback = false;
+      instance.reversed = direction === "reverse";
+      instance.remaining = instance.loop;
+      children = instance.children;
+      childrenLength = children.length;
+      //   for (let i = childrenLength; i--; ) instance.children[i].reset();
+      if (
+        (instance.reversed && instance.loop !== true) ||
+        (direction === "alternate" && instance.loop === 1)
+      )
+        instance.remaining++;
+      setAnimationsProgress(instance.reversed ? instance.duration : 0);
+    }
+    instance.paused = false;
+    activeInstances.push(instance);
+    // resetTime();
+    engine();
+  };
+
   instance.reverse = function() {
     toggleInstanceDirection();
     instance.completed = instance.reversed ? false : true;
@@ -1235,7 +1272,12 @@ function stagger(val, params = {}) {
 }
 
 // Timeline
-
+/**
+ * Added the shouldReset to param, which when set to false, it works
+ * with the new added continue() function.
+ * When undefined, or set to true, it behaves, as before.
+ * @param {*} params
+ */
 function timeline(params = {}) {
   let tl = anime(params);
   tl.duration = 0;
@@ -1261,8 +1303,14 @@ function timeline(params = {}) {
     tl.delay = timings.delay;
     tl.endDelay = timings.endDelay;
     tl.duration = timings.duration;
-    tl.seek(0);
-    tl.reset();
+    /**
+     *  added here, so that we do not reset, after we add a new animation
+     *  default behavoir is == true
+     */
+    if (params.shouldReset == undefined || params.shouldReset == true) {
+        tl.seek(0);
+        tl.reset();
+    }
     if (tl.autoplay) tl.play();
     return tl;
   }
