@@ -41,7 +41,8 @@ setTimeout(()=>{
 
 // this will run the animation of 1000 ms
 // note, if the timeline is paused, this promise wont be fulfilled and will wait until it is finished
-await tl.play(); 
+tl.play(); 
+await tl.finished
 
 
 tl.add({
