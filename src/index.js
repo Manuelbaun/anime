@@ -898,7 +898,7 @@ function isDocumentHidden() {
 // Public Instance
 
 function anime(params = {}) {
-
+ 
   let startTime = 0, lastTime = 0, now = 0;
   let children, childrenLength = 0;
   let resolve = null;
@@ -912,6 +912,8 @@ function anime(params = {}) {
   let instance = createNewInstance(params);
   let promise = makePromise(instance);
 
+  
+  instance.useDeltaTime = params.useDeltaTime;
   function toggleInstanceDirection() {
     const direction = instance.direction;
     if (direction !== 'alternate') {
@@ -1109,9 +1111,32 @@ function anime(params = {}) {
 
   instance.tick = function(t) {
     now = t;
-    if (!startTime) startTime = now;
-    setInstanceProgress((now + (lastTime - startTime)) * anime.speed);
-  }
+    if (!startTime) { startTime = now; }
+
+    /**
+     * added by: Manuel Baun 
+     * 
+     * The useDeltaTime will apply the speed on the 1000/60 => 60 fps or 16.6 
+     * and adds it to the instance currentTime this way, we don't influence the progress, 
+     * when we change the animation speed on the play. 
+     * 
+     * Also, when animation is paused, we don't get wired artifacts, when resume animation
+     * 
+     * Possible idea:
+     * Every instance could have its own speed!
+     * 
+     */
+    if (instance.useDeltaTime) {
+      // fixed calculation 1000 ms / 60 fps = 16.6
+      const deltaTime = 1000/60;
+      const progress = instance.currentTime + deltaTime * anime.speed;
+      setInstanceProgress(progress);
+    } else {
+      // old calculation
+      const progress = (now + (lastTime - startTime)) * anime.speed;
+      setInstanceProgress(progress);
+    }
+  };
 
   instance.seek = function(time) {
     setInstanceProgress(adjustTime(time));
@@ -1131,9 +1156,26 @@ function anime(params = {}) {
     engine();
   }
 
-   /**
-   * Added a custom function to continue from last added
+
+  /**
    * added by: Manuel Baun
+   * Will wait until the animation is finished before hit break
+   */
+  instance.step = async function() {
+    await instance.finished
+    instance.pause();
+  };
+
+
+   /**
+   * added by: Manuel Baun
+   * Added a custom function to continue from last added animation param
+   * the function removes the reset time function.
+   *  
+   * Copied most of it from instance.reset! (line 1107)
+   * 
+   * Returns the finshed promise
+   * @returns {Promise<void>}
    */
   instance.continue = function () {
     if (!instance.paused) return;
@@ -1141,8 +1183,6 @@ function anime(params = {}) {
     if (instance.completed) {
       const direction = instance.direction;
       instance.passThrough = false;
-      //   instance.currentTime = 0;
-      //   instance.progress = 0;
       instance.paused = true;
       instance.began = false;
       instance.loopBegan = false;
@@ -1154,18 +1194,13 @@ function anime(params = {}) {
       instance.remaining = instance.loop;
       children = instance.children;
       childrenLength = children.length;
-      //   for (let i = childrenLength; i--; ) instance.children[i].reset();
-      if (
-        (instance.reversed && instance.loop !== true) ||
-        (direction === "alternate" && instance.loop === 1)
-      )
-        instance.remaining++;
-      setAnimationsProgress(instance.reversed ? instance.duration : 0);
+      const aniProgress = instance.reversed ? instance.duration : 0;
+      setAnimationsProgress(aniProgress);
     }
     instance.paused = false;
     activeInstances.push(instance);
-    // resetTime();
     engine();
+    return instance.finished;
   };
 
   instance.reverse = function() {
@@ -1277,6 +1312,10 @@ function stagger(val, params = {}) {
  * with the new added continue() function.
  * When undefined, or set to true, it behaves, as before.
  * @param {*} params
+ * 
+ * 
+ * added by Manuel Baun 
+ * shouldUseDeltaTime
  */
 function timeline(params = {}) {
   let tl = anime(params);
@@ -1297,15 +1336,16 @@ function timeline(params = {}) {
     tl.seek(insParams.timelineOffset);
     const ins = anime(insParams);
     passThrough(ins);
-    const totalDuration = ins.duration + insParams.timelineOffset;
     children.push(ins);
     const timings = getInstanceTimings(children, params);
     tl.delay = timings.delay;
     tl.endDelay = timings.endDelay;
     tl.duration = timings.duration;
     /**
-     *  added here, so that we do not reset, after we add a new animation
-     *  default behavoir is == true
+     *  Added by Manuel Baun
+     * 
+     *  added here, so that we do not reset after we add a new animation
+     *  default behavior is == true
      */
     if (params.shouldReset == undefined || params.shouldReset == true) {
         tl.seek(0);
